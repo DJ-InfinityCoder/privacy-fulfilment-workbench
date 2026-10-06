@@ -104,8 +104,10 @@ export function Calendar({
 
   const handleMonthChange = (val: string | null) => {
     if (val === null) return
-    const m = Number.parseInt(val, 10)
-    setCurrentMonth((prev) => setMonth(prev, m))
+    const idx = MONTHS.indexOf(val)
+    if (idx !== -1) {
+      setCurrentMonth((prev) => setMonth(prev, idx))
+    }
   }
 
   const handleYearChange = (val: string | null) => {
@@ -151,18 +153,18 @@ export function Calendar({
       <div className="flex items-center justify-between gap-1 pb-3">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <Select
-            value={String(getMonth(currentMonth))}
+            value={MONTHS[getMonth(currentMonth)]}
             onValueChange={handleMonthChange}
           >
             <SelectTrigger
               size="sm"
               className="h-7 text-xs font-medium px-2 py-0 border-input bg-background flex-1 rounded-md"
             >
-              <SelectValue />
+              <SelectValue>{MONTHS[getMonth(currentMonth)]}</SelectValue>
             </SelectTrigger>
             <SelectContent className="max-h-56 rounded-md">
-              {MONTHS.map((m, idx) => (
-                <SelectItem key={m} value={String(idx)} className="text-xs rounded-md">
+              {MONTHS.map((m) => (
+                <SelectItem key={m} value={m} className="text-xs rounded-md">
                   {m}
                 </SelectItem>
               ))}
@@ -177,7 +179,7 @@ export function Calendar({
               size="sm"
               className="h-7 text-xs font-medium px-2 py-0 border-input bg-background w-[78px] shrink-0 rounded-md"
             >
-              <SelectValue />
+              <SelectValue>{String(getYear(currentMonth))}</SelectValue>
             </SelectTrigger>
             <SelectContent className="max-h-56 rounded-md">
               {years.map((y) => (

@@ -83,7 +83,7 @@ export class GroqProvider implements LLMProvider {
           max_completion_tokens: req.maxOutputTokens,
           temperature: req.temperature,
           ...(tools?.length ? { tools, parallel_tool_calls: true } : {}),
-          ...(req.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+          ...(req.jsonMode && !tools?.length ? { response_format: { type: "json_object" as const } } : {}),
         },
         signal ? { signal } : undefined,
       );

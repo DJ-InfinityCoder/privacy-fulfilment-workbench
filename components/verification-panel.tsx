@@ -171,6 +171,10 @@ export function VerificationPanel({
         </div>
       </header>
 
+      <div className="flex items-center gap-2 rounded-md border border-border/80 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <span>💡 <strong>Seed Record Reference:</strong> Account ID <code className="font-mono text-foreground">USR-1001</code> · Date of Birth: <code className="font-mono text-foreground">1991-04-18</code> (April 18, 1991) · Last order city: <code className="font-mono text-foreground">Sample City</code></span>
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-3">
         {(["email_match", "account_id_or_phone_last4", "knowledge_factor"] as const).map(
           (factor) => {
@@ -185,7 +189,7 @@ export function VerificationPanel({
                 <Badge
                   variant={missing ? "destructive" : provided ? "default" : "outline"}
                 >
-                  {missing ? "Missing" : provided ? "Provided" : "Not provided"}
+                  {missing ? "Unmatched" : provided ? "Verified" : "Not provided"}
                 </Badge>
               </div>
             );
@@ -271,10 +275,17 @@ export function VerificationPanel({
               ? "More information required"
               : "Verification incomplete"}
           </AlertTitle>
-          <AlertDescription>
-            {result.status === "AMBIGUOUS"
-              ? "Multiple profiles match. Provide an account ID to identify the correct profile."
-              : "Review the missing factors and try again. Submitted factor details are not disclosed."}
+          <AlertDescription className="space-y-1">
+            <p>
+              {result.status === "AMBIGUOUS"
+                ? "Multiple profiles match. Provide an account ID to identify the correct profile."
+                : "Submitted factor values did not match database records. Review the factors and retry."}
+            </p>
+            {result.status === "FAILED" && (
+              <p className="text-xs text-muted-foreground">
+                Tip: For Priya Sharma, the seeded record matches Email: <code className="font-mono text-foreground">priya.sharma@example.test</code>, Account ID: <code className="font-mono text-foreground">USR-1001</code>, DOB: <code className="font-mono text-foreground">1991-04-18</code> (April 18, 1991) or City: <code className="font-mono text-foreground">Sample City</code>.
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       )}

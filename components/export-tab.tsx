@@ -118,10 +118,21 @@ export function ExportTab({ requestId }: { requestId: string }) {
       </header>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant={error.includes("EXPORT approval") ? "default" : "destructive"}>
           <AlertCircle aria-hidden="true" />
-          <AlertTitle>Export unavailable</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>
+            {error.includes("EXPORT approval")
+              ? "Human Export Approval Required"
+              : "Export Unavailable"}
+          </AlertTitle>
+          <AlertDescription className="space-y-1.5">
+            <p>{error}</p>
+            {error.includes("EXPORT approval") && (
+              <p className="text-xs text-muted-foreground">
+                To generate and download this export package, open the <strong>Approvals</strong> tab. An Analyst requests export approval, and an independent Approver (Rahul) authorizes the release under Four-Eyes governance.
+              </p>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 

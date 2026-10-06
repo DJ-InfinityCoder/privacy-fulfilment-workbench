@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "cn";
 import {
   Activity,
   AlertCircle,
@@ -270,8 +271,8 @@ export function RequestDetailWorkspace({
 
   // Approval card decision state
   const [decisionComments, setDecisionComments] = useState<Record<string, string>>({});
-  const [confirmApproveKind, setConfirmApproveKind] = useState<"CORRECTION" | "DELETION" | null>(null);
-  const [confirmRejectKind, setConfirmRejectKind] = useState<"CORRECTION" | "DELETION" | null>(null);
+  const [confirmApproveKind, setConfirmApproveKind] = useState<"CORRECTION" | "DELETION" | "EXPORT" | null>(null);
+  const [confirmRejectKind, setConfirmRejectKind] = useState<"CORRECTION" | "DELETION" | "EXPORT" | null>(null);
 
   // Execution dialog state
   const [confirmExecuteKind, setConfirmExecuteKind] = useState<"CORRECTION" | "DELETION" | null>(null);
@@ -358,6 +359,7 @@ export function RequestDetailWorkspace({
 
   const correctionApproval = approvals.find((a) => a.kind === "CORRECTION");
   const deletionApproval = approvals.find((a) => a.kind === "DELETION");
+  const exportApproval = approvals.find((a) => a.kind === "EXPORT");
 
   const isCorrectionApproved =
     correctionApproval?.status === "APPROVED" ||
@@ -365,6 +367,9 @@ export function RequestDetailWorkspace({
   const isDeletionApproved =
     deletionApproval?.status === "APPROVED" ||
     deletionApproval?.status === "CONSUMED";
+  const isExportApproved =
+    exportApproval?.status === "APPROVED" ||
+    exportApproval?.status === "CONSUMED";
 
   const writeApprovalsResolved =
     (correctionActions.length === 0 || isCorrectionApproved) &&
@@ -494,6 +499,7 @@ export function RequestDetailWorkspace({
   // Live countdowns
   const correctionCountdown = useCountdown(correctionApproval?.expiresAt);
   const deletionCountdown = useCountdown(deletionApproval?.expiresAt);
+  const exportCountdown = useCountdown(exportApproval?.expiresAt);
 
   // Skipped actions detection
   const hasSkippedActions = executions.some(
@@ -539,6 +545,7 @@ export function RequestDetailWorkspace({
   }
 
   async function handleApprovePlan() {
+    let approved = false;
     // If no plan approval exists, request it first
     if (!planApproval) {
       await run(
@@ -552,24 +559,30 @@ export function RequestDetailWorkspace({
             await post(`/api/approvals/${encodeURIComponent(req.approvalId)}/decide`, {
               decision: "APPROVED",
             });
+            approved = true;
           }
         },
         canDecideGeneral
-          ? "Plan approved successfully."
-          : "Plan approval requested.",
+          ? "Plan approved successfully. Advancing to Search & Inventory."
+          : "Plan approval requested. Switch role to Approver (Rahul) to authorize.",
       );
     } else if (planApproval.status === "PENDING" && canDecideGeneral) {
       await run(
         "approve-plan",
-        () =>
-          post(
+        async () => {
+          await post(
             `/api/approvals/${encodeURIComponent(planApproval.approvalId)}/decide`,
             { decision: "APPROVED" },
-          ),
-        "Plan approved successfully.",
+          );
+          approved = true;
+        },
+        "Plan approved successfully. Advancing to Search & Inventory.",
       );
     }
     setPlanApprovalDialogOpen(false);
+    if (approved) {
+      setActiveTab("inventory");
+    }
   }
 
   // Request approval
@@ -1128,7 +1141,7 @@ export function RequestDetailWorkspace({
                       className="gap-1.5"
                     >
                       <Check className="size-3.5" />
-                      Approve Plan
+                      {canDecideGeneral ? "Approve Plan" : "Request Approval"}
                     </Button>
                   )}
                   {isPlanApproved && (
@@ -1329,32 +1342,47 @@ export function RequestDetailWorkspace({
               )}
 
               {/* Collapsible Tool-Call Trace */}
-              <Card>
-                <CardHeader className="p-3">
-                  <button
-                    type="button"
-                    onClick={() => setToolTraceOpen(!toolTraceOpen)}
-                    className="flex w-full items-center justify-between text-left text-xs font-semibold"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Wrench className="size-3.5 text-primary" />
-                      Tool-call Trace ({toolTraceEvents.length} calls)
-                    </span>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={toolTraceOpen}
+                onClick={() => setToolTraceOpen(!toolTraceOpen)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setToolTraceOpen(!toolTraceOpen);
+                  }
+                }}
+                className={cn(
+                  "w-full rounded-md border bg-card text-card-foreground shadow-xs transition-colors cursor-pointer select-none overflow-hidden",
+                  "hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+              >
+                <div className="flex w-full items-center justify-between p-3.5 text-xs font-semibold">
+                  <span className="flex items-center gap-2">
+                    <Wrench className="size-4 text-primary shrink-0" />
+                    <span>Tool-call Trace ({toolTraceEvents.length} calls)</span>
+                  </span>
+                  <span className="text-muted-foreground">
                     {toolTraceOpen ? (
                       <ChevronDown className="size-4" />
                     ) : (
                       <ChevronRight className="size-4" />
                     )}
-                  </button>
-                </CardHeader>
+                  </span>
+                </div>
+
                 {toolTraceOpen && (
-                  <CardContent className="pt-0 text-xs">
+                  <div
+                    className="border-t bg-muted/10 p-3 text-xs cursor-default"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {toolTraceEvents.length === 0 ? (
                       <p className="text-muted-foreground">No tool calls logged yet.</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                         {toolTraceEvents.map((t) => (
-                          <div key={t.seq} className="rounded-md border bg-muted/20 p-2.5 font-mono text-[11px]">
+                          <div key={t.seq} className="rounded-md border bg-background/80 p-2.5 font-mono text-[11px]">
                             <div className="flex items-center justify-between text-muted-foreground">
                               <span>#{t.seq} · {t.eventType}</span>
                               <span>{new Date(t.at).toLocaleTimeString()}</span>
@@ -1368,9 +1396,9 @@ export function RequestDetailWorkspace({
                         ))}
                       </div>
                     )}
-                  </CardContent>
+                  </div>
                 )}
-              </Card>
+              </div>
 
               {/* Mandatory Policy Disclaimer */}
               <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed">
@@ -1650,6 +1678,113 @@ export function RequestDetailWorkspace({
                 )}
               </CardContent>
             </Card>
+
+            {/* CARD 3: EXPORT APPROVAL */}
+            {(request.type === "ACCESS" || isInventoryReviewed) && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileCheck2 className="size-4 text-primary" />
+                      <CardTitle className="text-base">Export Approval</CardTitle>
+                    </div>
+                    <Badge variant={statusTone(exportApproval?.status ?? "NOT_REQUESTED")}>
+                      {exportApproval?.status ?? "NOT REQUESTED"}
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    Authorizes generation and release of customer export package under reviewed policy redactions.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div>
+                    <p className="font-semibold text-foreground">Scope Covered:</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {inventory
+                        ? `Reviewed Data Inventory v${inventory.version} (${inventory.itemCount} records)`
+                        : "Requires reviewed data inventory."}
+                    </p>
+                  </div>
+
+                  {exportApproval && (
+                    <div className="flex items-center justify-between rounded-md bg-muted/40 p-2.5">
+                      <span className="text-muted-foreground">Expiry Window:</span>
+                      <span
+                        className={`font-medium ${
+                          exportCountdown.isExpired ? "text-destructive" : "text-foreground"
+                        }`}
+                      >
+                        {exportCountdown.timeLeft || "Checking..."}
+                      </span>
+                    </div>
+                  )}
+
+                  {!exportApproval && (
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={Boolean(busyAction) || !isInventoryReviewed}
+                      onClick={() => handleRequestApproval("EXPORT")}
+                    >
+                      {isInventoryReviewed
+                        ? "Request Export Approval"
+                        : "Review Inventory First"}
+                    </Button>
+                  )}
+
+                  {exportApproval?.status === "PENDING" && (
+                    <div className="space-y-3 pt-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="exp-comment" className="text-xs">
+                          Comment (Required to reject)
+                        </Label>
+                        <Input
+                          id="exp-comment"
+                          value={decisionComments[exportApproval.approvalId] ?? ""}
+                          onChange={(e) =>
+                            setDecisionComments((prev) => ({
+                              ...prev,
+                              [exportApproval.approvalId]: e.target.value,
+                            }))
+                          }
+                          placeholder="Add approval comment or rejection reason"
+                        />
+                      </div>
+
+                      {!canDecideGeneral && (
+                        <div className="rounded-md bg-destructive/10 p-2.5 text-xs text-destructive">
+                          {`Approve/Reject disabled: Current role '${currentRole}' is not authorized to decide approvals. Switch to 'approver' in the top bar.`}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          disabled={!canDecideGeneral || Boolean(busyAction)}
+                          onClick={() => setConfirmApproveKind("EXPORT")}
+                        >
+                          Approve Export
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          disabled={
+                            !canDecideGeneral ||
+                            Boolean(busyAction) ||
+                            !(decisionComments[exportApproval.approvalId] ?? "").trim()
+                          }
+                          onClick={() => setConfirmRejectKind("EXPORT")}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
@@ -2086,10 +2221,22 @@ export function RequestDetailWorkspace({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Approve Proposed Plan?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will approve Plan {request.planVersion ?? "v1"} (Hash:{" "}
-              {request.planHash ? shortenKey(request.planHash) : "N/A"}). This authorizes the read investigation steps and proposed action sets.
+            <AlertDialogTitle>
+              {canDecideGeneral ? "Approve Proposed Plan?" : "Request Plan Approval?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This will {canDecideGeneral ? "approve" : "request approval for"} Plan {request.planVersion ?? "v1"} (Hash:{" "}
+                {request.planHash ? shortenKey(request.planHash) : "N/A"}). This authorizes the read investigation steps and proposed action sets.
+              </p>
+              {!canDecideGeneral && (
+                <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300">
+                  <p className="font-semibold">Role: Analyst ({currentActorId})</p>
+                  <p className="mt-0.5">
+                    Under organizational policy, Analysts cannot decide approvals. Switch to <strong>Rahul (Approver)</strong> in the top-right header to approve this plan directly.
+                  </p>
+                </div>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2098,7 +2245,7 @@ export function RequestDetailWorkspace({
               disabled={Boolean(busyAction)}
               onClick={handleApprovePlan}
             >
-              Confirm Plan Approval
+              {canDecideGeneral ? "Confirm Plan Approval" : "Request Approval"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2208,6 +2355,60 @@ export function RequestDetailWorkspace({
               onClick={() =>
                 deletionApproval &&
                 handleDecideApproval(deletionApproval, "REJECTED")
+              }
+            >
+              Confirm Rejection
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ALERT DIALOG: APPROVE EXPORT */}
+      <AlertDialog
+        open={confirmApproveKind === "EXPORT"}
+        onOpenChange={(open) => !open && setConfirmApproveKind(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Customer Export Package?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are authorizing generation and release of the customer data export. Policy redactions will automatically mask third-party and restricted content.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(busyAction)}
+              onClick={() =>
+                exportApproval &&
+                handleDecideApproval(exportApproval, "APPROVED")
+              }
+            >
+              Authorize Export
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ALERT DIALOG: REJECT EXPORT */}
+      <AlertDialog
+        open={confirmRejectKind === "EXPORT"}
+        onOpenChange={(open) => !open && setConfirmRejectKind(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Export Request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reject the export approval. The inventory will need to be re-reviewed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(busyAction)}
+              onClick={() =>
+                exportApproval &&
+                handleDecideApproval(exportApproval, "REJECTED")
               }
             >
               Confirm Rejection
